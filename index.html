@@ -713,12 +713,12 @@ const eqEl=$('#eq');
 $('#eqr').onclick=()=>eqEl.querySelectorAll('input').forEach((s,i)=>{s.value=EQ0[i];eq[i].gain.value=EQ0[i]});
 
 /* ---------- HAND（MediaPipe Hands → 仮想の手でビジュアライザーを揉み、音へ反映） ---------- */
-const HS={sq:0,pl:0,x:0,y:0,sp:0,op:0,n:0},HV0={size:1,push:1,pull:1,jelly:1,damp:1,smooth:1,glow:1,depth:1},HV={...HV0},
- HSRC=[['sq','SQUEEZE'],['pl','PULL'],['x','HAND X'],['y','HAND Y'],['sp','SPEED'],['op','OPEN⇄FIST']],
+const HS={sq:0,pl:0,x:0,y:0,sp:0,op:0,n:0,st:0,tr:0},HV0={size:1,push:1,pull:1,jelly:1,damp:1,smooth:1,glow:1,depth:1,follow:1,tear:1.1},HV={...HV0},
+ HSRC=[['sq','SQUEEZE'],['pl','PULL'],['x','HAND X'],['y','HAND Y'],['sp','SPEED'],['op','OPEN⇄FIST'],['st','STRETCH'],['tr','TEAR/SLICE']],
  HDST=DST.concat([['bend','Pitch Bend'],['vib','Vibrato'],['tape','Tape Speed']]),
- HM0=[['sq','foc',.7],['sq','mix',.5],['pl','rev',.6],['x','fq',.5],['y','cut',.5],['sp','bend',.4]],HMAP=HM0.map(([s,d,a])=>({s,d,a}));
+ HM0=[['sq','foc',.7],['sq','mix',.5],['pl','rev',.6],['x','fq',.5],['y','cut',.5],['sp','bend',.4],['st','wd',.5],['tr','bst',.8]],HMAP=HM0.map(([s,d,a])=>({s,d,a}));
 const hsave=()=>{try{localStorage.setItem('gs_hand',JSON.stringify({v:HV,m:HMAP}))}catch(e){}};
-mkSl($('#hvs'),[['size','Finger',.4,2,.01,1],['push','Push',0,2,.01,1],['pull','Pull',0,2,.01,1],['jelly','Jelly',.3,3,.01,1],['damp','Damping',.3,3,.01,1],['smooth','Smooth',.3,3,.01,1],['glow','Glow',0,2,.01,1],['depth','Depth',.3,2,.01,1]],HV,hsave);
+mkSl($('#hvs'),[['size','Finger',.4,2,.01,1],['push','Push',0,2,.01,1],['pull','Pull',0,2,.01,1],['jelly','Jelly',.3,3,.01,1],['damp','Damping',.3,3,.01,1],['smooth','Smooth',.3,3,.01,1],['glow','Glow',0,2,.01,1],['depth','Depth',.3,2,.01,1],['follow','Follow',0,2,.01,1],['tear','Tear',.5,3,.01,1.1]],HV,hsave);
 $('#hvs').querySelectorAll('input').forEach(i=>i.classList.add('nopre'));
 try{const j=JSON.parse(localStorage.getItem('gs_hand')||'null');if(j){Object.assign(HV,j.v);if(j.m&&j.m.length===HMAP.length)j.m.forEach((m,i)=>Object.assign(HMAP[i],m))}}catch(e){}
 function hUi(){const h=$('#hmap');h.innerHTML='';
@@ -738,6 +738,12 @@ function handAudio(h){if(!ctx)return;const t=ctx.currentTime;
  if(h.bend||hbP){bendCS.offset.setTargetAtTime(clamp(h.bend,-1,1)*SY.bend*100,t,.05);hbP=h.bend}
  if(h.vib||hvP){vibG.gain.setTargetAtTime(clamp(h.vib,0,1)*SY.vib,t,.05);hvP=h.vib}
  if(h.tape||htP){cs.offset.setTargetAtTime(clamp(1-Math.max(0,h.tape)*.85,.15,1),t,.06);htP=h.tape}}
+/* 分断（ちぎれる／切る）→ 実際のグラニュラーを発火。粒はビジュアライザーの粒にも反映される */
+function handTear(a){if(!ctx)return;const c=[];pads.forEach((p,i)=>{if(p.inc&&p.buf)c.push(i)});if(!c.length)return;
+ const sv={mix:GR.mix,dens:GR.dens,len:GR.len,pan:GR.pan,scat:GR.scat};
+ Object.assign(GR,{mix:Math.max(GR.mix,.9),dens:Math.max(GR.dens,35+30*a),len:Math.max(GR.len,.5+a*.9),pan:Math.max(GR.pan,.8),scat:Math.max(GR.scat,.6)});
+ for(let k=0;k<2;k++){const p=pads[c[r()*c.length|0]];gran(p.buf,0,[0,0,700,-1200,1200][r()*5|0],.3+.8*a,p.buf.keep?pnIn:padsBus,gkOf(p.kind))}
+ Object.assign(GR,sv)}
 /* カメラ＋MediaPipe */
 let hOn=false,hStream,hands,hBusy=0,hVid;
 const HJS='https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/',
@@ -1039,7 +1045,7 @@ const V3=(()=>{
   hO=new THREE.Object3D(),hc=new THREE.Color(),UPV=new THREE.Vector3(0,1,0),hQ=new THREE.Vector3(),
   HH=[0,1].map(()=>({a:0,v:0,lm:new Float32Array(63),P:new Float32Array(63),Q:new Float32Array(63),hs:.16,pw:0,pin:0,an:[0,0,1],lx:.5,init:0,hid:0,q0:0})),
   hd=new Float32Array(N*3),hv=new Float32Array(N*3),CA=new Float32Array(96*4),GA=new Float32Array(6),GC=new Float32Array(6);
- let RAW=null,rawT=0,vAsp=4/3,CN=0,GN=0,hRun=false,hMax=0,hSum=0,hDt=.016;
+ let RAW=null,rawT=0,vAsp=4/3,CN=0,GN=0,hRun=false,hMax=0,hSum=0,hDt=.016,hIn=0,hOut=0,hCnt=0,hFx=0,hFy=0,hFz=0,hBu=0,gx0=0,gz0=0,trg=0;const hOff=[0,0,0],hOv=[0,0,0];
  [HJ,HBm].forEach(m=>{m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);m.setColorAt(0,hc);m.frustumCulled=false;m.renderOrder=6;scene.add(m);
   hO.position.set(0,-9,0);hO.scale.setScalar(0);hO.updateMatrix();for(let i=0;i<42;i++)m.setMatrixAt(i,hO.matrix)});
  function setHands(a,asp){
@@ -1047,12 +1053,19 @@ const V3=(()=>{
   const l=a.slice(0,2).sort((p,q)=>p[0].x-q[0].x);
   if(l.length===2){RAW[0]=l[0];RAW[1]=l[1]}
   else if(l.length===1){const w=l[0][0].x,k=HH[0].a&&(!HH[1].a||Math.abs(HH[0].lx-w)<=Math.abs(HH[1].lx-w))?0:HH[1].a?1:0;RAW[k]=l[0]}}
- function addC(x,y,z,r,s,gy){const lx=x/s,ly=(y-gy)/s,lz=z/s,rh=r/s;if(CN<96&&lx*lx+ly*ly+lz*lz<(R0*3.2+rh)*(R0*3.2+rh)){const o=CN*4;CA[o]=lx;CA[o+1]=ly;CA[o+2]=lz;CA[o+3]=rh;CN++}}
+ function burst(wx,wy,wz,n,sp){const cx=grp.position.x,cy=grp.position.y,cz=grp.position.z;
+  for(let i=0;i<n;i++){spawn(0,0,.12,.9,'#e6e0d0');const p=PA[(pI+NP-1)%NP];
+   p.x=CL(wx+rr(-.12,.12),-S+.2,S-.2);p.y=CL(wy+rr(-.12,.12),-S+.3,S-.2);p.z=CL(wz+rr(-.12,.12),-S+.2,S-.2);
+   const dx=p.x-cx+rr(-.5,.5),dy=p.y-cy+rr(-.5,.5),dz=p.z-cz+rr(-.5,.5),l=Math.hypot(dx,dy,dz)||1,v=sp*rr(.4,1.3);
+   p.vx=dx/l*v;p.vy=dy/l*v;p.vz=dz/l*v;p.r=.04+r()*.09;p.l=1.5+r()*2;p.t=0;p.a=1}}
+ function addC(x,y,z,r,s,gy){const lx=(x-gx0)/s,ly=(y-gy)/s,lz=(z-gz0)/s,rh=r/s;if(CN<96&&lx*lx+ly*ly+lz*lz<(R0*3.2+rh)*(R0*3.2+rh)){const o=CN*4;CA[o]=lx;CA[o+1]=ly;CA[o+2]=lz;CA[o+3]=rh;CN++}}
  function handsUpdate(dt){
   hDt=Math.min(dt,.033)||.016;cam.updateMatrixWorld();
   const e=cam.matrixWorld.elements,tf=Math.tan(cam.fov*Math.PI/360),cp=cam.position,alive=RAW&&performance.now()-rawT<350,s=grp.scale.x||1,gy=grp.position.y,pm=hMax,
-   sqT=hRun?Math.sqrt(Math.min(1,hSum/N/(R0*.12))):0;
-  hSum=0;hMax=0;CN=0;GN=0;let n=0,sx=0,sy=0,sp=0,op=0,pl=0;
+   sqT=hRun?Math.sqrt(Math.min(1,hIn/N/(R0*.05))):0,stT=hRun?Math.sqrt(Math.min(1,hOut/N/(R0*.05))):0,cn=Math.max(hCnt,1),fk=Math.min(1,hCnt/30)*1.5*s*HV.follow;
+  gx0=grp.position.x;gz0=grp.position.z;trg=0;hBu=sqT*.16*HV.push;
+  {const tg=[hFx/cn*fk,hFy/cn*fk,hFz/cn*fk],m=Math.hypot(tg[0],tg[1],tg[2]),kk=m>1.3?1.3/m:1;for(let q=0;q<3;q++){hOv[q]+=((tg[q]*kk-hOff[q])*70-hOv[q]*9)*hDt;hOff[q]+=hOv[q]*hDt}}
+  hIn=hOut=hCnt=hFx=hFy=hFz=0;hSum=0;hMax=0;CN=0;GN=0;let n=0,sx=0,sy=0,sp=0,op=0,pl=0;
   for(let k=0;k<2;k++){
    const H=HH[k],raw=alive?RAW[k]:null;H.a=raw?1:0;
    if(raw){
@@ -1065,39 +1078,44 @@ const V3=(()=>{
    if(H.v<.02&&!raw){if(!H.hid){H.hid=1;hO.position.set(0,-9,0);hO.scale.setScalar(0);hO.updateMatrix();for(let i=0;i<21;i++){HJ.setMatrixAt(k*21+i,hO.matrix);HBm.setMatrixAt(k*21+i,hO.matrix)}}continue}
    H.hid=0;
    /* 画面上の位置はカメラ映像そのまま、奥行きは手の大きさ（近い＝手前）で決める */
-   const zo=CL(2.4+(H.hs-.16)*22*HV.depth,-1.5,6),dist=Math.max(2,V.rad-zo),sc=2*tf*dist,zs=vAsp*sc,hsW=H.hs*zs,vis=H.v,rj=.085*hsW*HV.size*vis,rb=.06*hsW*HV.size*vis,rc=rj*1.7,P=H.P,Q=H.Q;
+   const zo=CL((.2-H.hs)*40*HV.depth,-3,5),dist=Math.max(2,V.rad-zo),sc=2*tf*dist,zs=vAsp*sc,hsW=H.hs*zs,vis=H.v,rj=.085*hsW*HV.size*vis,rb=.06*hsW*HV.size*vis,rc=rj*1.7,P=H.P,Q=H.Q;
    for(let i=0;i<21;i++){const o=i*3,u=(.5-H.lm[o])*zs,vv=(.5-H.lm[o+1])*sc,w=dist+H.lm[o+2]*zs;
     P[o]=cp.x-e[8]*w+e[0]*u+e[4]*vv;P[o+1]=cp.y-e[9]*w+e[1]*u+e[5]*vv;P[o+2]=cp.z-e[10]*w+e[2]*u+e[6]*vv}
    let spd=0;if(H.q0){for(const i of TIP){const o=i*3;spd+=Math.hypot(P[o]-Q[o],P[o+1]-Q[o+1],P[o+2]-Q[o+2])/hDt}spd=spd/5/(hsW*4||1)}
-   Q.set(P);H.q0=1;
-   for(let i=0;i<21;i++){const o=i*3,tp=TIP.includes(i);hO.position.set(P[o],P[o+1],P[o+2]);hO.quaternion.identity();hO.scale.setScalar(rj*(tp?1.15:1)+1e-4);hO.updateMatrix();HJ.setMatrixAt(k*21+i,hO.matrix);
+   Q.set(P);H.q0=1;let ins=0;
+   for(let i=0;i<21;i++){const o=i*3,tp=TIP.includes(i);if(tp&&Math.hypot(P[o]-gx0,P[o+1]-gy,P[o+2]-gz0)/s<R0*1.05)ins=1;hO.position.set(P[o],P[o+1],P[o+2]);hO.quaternion.identity();hO.scale.setScalar(rj*(tp?1.15:1)+1e-4);hO.updateMatrix();HJ.setMatrixAt(k*21+i,hO.matrix);
     hc.setRGB(1,.98,.92).multiplyScalar((tp?.9:.55)*HV.glow+.25);HJ.setColorAt(k*21+i,hc);addC(P[o],P[o+1],P[o+2],rc,s,gy)}
    HBN.forEach(([a,b],i)=>{const A=a*3,B=b*3,dx=P[B]-P[A],dy=P[B+1]-P[A+1],dz=P[B+2]-P[A+2],l=Math.hypot(dx,dy,dz)||1e-4,mx=(P[A]+P[B])/2,my=(P[A+1]+P[B+1])/2,mz=(P[A+2]+P[B+2])/2;
     hO.position.set(mx,my,mz);hO.quaternion.setFromUnitVectors(UPV,hQ.set(dx/l,dy/l,dz/l));hO.scale.set(rb+1e-4,l,rb+1e-4);hO.updateMatrix();HBm.setMatrixAt(k*21+i,hO.matrix);
     HBm.setColorAt(k*21+i,hc.setRGB(.8,.78,.72).multiplyScalar(.4*HV.glow+.3));addC(mx,my,mz,rc,s,gy)});
    {let px=0,py=0,pz=0;for(const i of[0,5,9,13,17]){px+=P[i*3]/5;py+=P[i*3+1]/5;pz+=P[i*3+2]/5}addC(px,py,pz,hsW*.4*vis,s,gy)}
+   H.cd=Math.max(0,(H.cd||0)-hDt);if(ins&&spd>1&&!H.cd&&vis>.8){H.cd=.3;trg=Math.max(trg,Math.min(1,spd*.5));burst(P[24],P[25],P[26],12+Math.min(16,spd*8|0),.8);handTear(Math.min(1,spd*.5))}
    /* つまみ：親指(4)と人差し指(8)が近づくと球体をつかんで引っ張る */
    {const pd=Math.hypot(P[12]-P[24],P[13]-P[25],P[14]-P[26])/(hsW||1),on=H.pw?pd<.5:pd<.28,
-     qx=(P[12]+P[24])/2/s,qy=((P[13]+P[25])/2-gy)/s,qz=(P[14]+P[26])/2/s;
+     qx=((P[12]+P[24])/2-gx0)/s,qy=((P[13]+P[25])/2-gy)/s,qz=((P[14]+P[26])/2-gz0)/s;
     if(on&&!H.pw){const m=Math.hypot(qx,qy,qz);H.pin=m<R0*1.5&&m>1e-3?1:0;if(H.pin){H.an[0]=qx/m;H.an[1]=qy/m;H.an[2]=qz/m}}
     if(!on)H.pin=0;H.pw=on;
-    if(H.pin&&GN<2){const o=GN*3;GA[o]=H.an[0];GA[o+1]=H.an[1];GA[o+2]=H.an[2];GC[o]=qx;GC[o+1]=qy;GC[o+2]=qz;GN++;pl=Math.max(pl,CL((Math.hypot(qx,qy,qz)-R0)/(R0*1.6),0,1))}}
+    if(H.pin&&GN<2){const ext=(Math.hypot(qx,qy,qz)-R0)/R0;
+     if(ext>HV.tear){H.pin=0;trg=1;burst(qx*s+gx0,qy*s+gy,qz*s+gz0,36,1);handTear(1)}
+     else{const o=GN*3;GA[o]=H.an[0];GA[o+1]=H.an[1];GA[o+2]=H.an[2];GC[o]=qx;GC[o+1]=qy;GC[o+2]=qz;GN++;pl=Math.max(pl,CL(ext/1.6,0,1))}}}
    /* 音へ渡す値 */
    {let cx=0,cy=0;for(const i of[0,5,9,13,17]){cx+=H.lm[i*3]/5;cy+=H.lm[i*3+1]/5}
     let o2=0;for(const i of[8,12,16,20])o2+=Math.hypot(H.lm[i*3]-H.lm[0],(H.lm[i*3+1]-H.lm[1])/vAsp)/(H.hs||.1)/4;
     n++;sx+=(.5-cx)*2;sy+=(.5-cy)*2;sp+=spd;op+=CL((o2-1.15)/.9,0,1)*2-1}
   }
   hRun=CN>0||GN>0||pm>.002;
-  const a=1-Math.exp(-hDt*(n?10:5)),T={sq:sqT,pl,x:n?CL(sx/n,-1,1):0,y:n?CL(sy/n,-1,1):0,sp:n?Math.min(1,sp/n):0,op:n?op/n:0};
-  for(const q in T)HS[q]+=(T[q]-HS[q])*a;HS.n=n;
+  const a=1-Math.exp(-hDt*(n?10:5)),T={sq:sqT,st:stT,pl,x:n?CL(sx/n,-1,1):0,y:n?CL(sy/n,-1,1):0,sp:n?Math.min(1,sp/n):0,op:n?op/n:0};
+  for(const q in T)HS[q]+=(T[q]-HS[q])*a;HS.n=n;HS.tr=Math.max(HS.tr*Math.exp(-hDt*2.5),trg);
   HJ.instanceMatrix.needsUpdate=HBm.instanceMatrix.needsUpdate=true;if(HJ.instanceColor)HJ.instanceColor.needsUpdate=HBm.instanceColor.needsUpdate=true}
  /* 頂点ごとの変形：接触（押し出し）＋つまみ（引っ張り）→ バネで追従させてジェリーの余韻を作る */
  function hk(i,X,Y,Z){
-  if(hRun){const j=i*3;let tx=0,ty=0,tz=0;
+  if(hRun){const j=i*3;let tx=0,ty=0,tz=0;const rv=Math.sqrt(X*X+Y*Y+Z*Z)||1e-4;
    for(let c=0,o=0;c<CN;c++,o+=4){const dx=X-CA[o],dy=Y-CA[o+1],dz=Z-CA[o+2],rh=CA[o+3],d2=dx*dx+dy*dy+dz*dz;
     if(d2<rh*rh){const d=Math.sqrt(d2),k=(rh-d)*HV.push/Math.max(d,rh*.25);tx+=dx*k;ty+=dy*k;tz+=dz*k}}
-   if(GN){const rv=Math.sqrt(X*X+Y*Y+Z*Z)||1e-4;for(let g=0,o=0;g<GN;g++,o+=3){const w=Math.exp(-(1-(X*GA[o]+Y*GA[o+1]+Z*GA[o+2])/rv)*9)*.8*HV.pull;tx+=(GC[o]-X)*w;ty+=(GC[o+1]-Y)*w;tz+=(GC[o+2]-Z)*w}}
-   hSum+=Math.abs(tx)+Math.abs(ty)+Math.abs(tz);
+   if(GN){for(let g=0,o=0;g<GN;g++,o+=3){const w=Math.exp(-(1-(X*GA[o]+Y*GA[o+1]+Z*GA[o+2])/rv)*9)*.8*HV.pull;tx+=(GC[o]-X)*w;ty+=(GC[o+1]-Y)*w;tz+=(GC[o+2]-Z)*w}}
+   const tm=Math.abs(tx)+Math.abs(ty)+Math.abs(tz);
+   if(tm>.004){hCnt++;hFx+=tx;hFy+=ty;hFz+=tz;const ro=(tx*X+ty*Y+tz*Z)/rv;if(ro<0)hIn-=ro;else hOut+=ro}
+   {const b=hBu/rv;tx+=X*b;ty+=Y*b;tz+=Z*b}
    const K=120*HV.jelly,C=2*Math.sqrt(K)*.28*HV.damp;
    hv[j]+=((tx-hd[j])*K-hv[j]*C)*hDt;hv[j+1]+=((ty-hd[j+1])*K-hv[j+1]*C)*hDt;hv[j+2]+=((tz-hd[j+2])*K-hv[j+2]*C)*hDt;
    hd[j]+=hv[j]*hDt;hd[j+1]+=hv[j+1]*hDt;hd[j+2]+=hv[j+2]*hDt;
@@ -1156,7 +1174,7 @@ const V3=(()=>{
   const m=VL.m,dyn=DYN.ke;
   LK.tw=m[0]*Math.PI*1.1;LK.W=Math.max(0,1+1.3*m[1]+.5*E.mix*E.bst)+(anL?0:.05);LK.st=1+.35*m[2];LK.cut=VL.cut;LK.m2=m[2];
   handsUpdate(dt);const cy=.15+.08*Math.sin(t*.6),mr=deform(t),s=Math.min(Math.max(.2,(.7+.5*dyn)*(1+.25*pulse)),1.95/(mr*1.05)),Rb=mr*s*1.05;
-  grp.scale.setScalar(s);grp.position.y=cy;
+  grp.scale.setScalar(s);grp.position.set(hOff[0],cy+hOff[1],hOff[2]);
   const cl=VX.clr;bars.material.opacity=1-.8*cl;sph.material.opacity=1-.6*cl;parts.material.opacity=.9*(1-.5*cl);shell.material.opacity=(.12+.3*VL.rev+.15*pulse)*(1-.6*cl);wire.material.opacity=.05+.2*VL.rev+.3*pulse;
   floor(.55+.8*dyn,Rb,cy);bands();partsUpd(dt,Rb,cy,ctx?ctx.currentTime:0);
   rd.render(scene,cam);return peak;

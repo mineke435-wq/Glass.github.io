@@ -1,5 +1,5 @@
 /* Glass Sampler service worker: アプリ本体をプリキャッシュし、CDN(three.js / MediaPipe / Fonts)は実行時にキャッシュ */
-const V = 'glass-sampler-v2', CORE = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
+const V = 'glass-sampler-v3', CORE = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => e.waitUntil(caches.open(V).then(c => c.addAll(CORE)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== V).map(x => caches.delete(x)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', e => {
